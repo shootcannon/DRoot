@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="keywords" content="Groovy, Groovy1337, DongakClub">
+    
+    <title>./Groovy</title>
+
+    <link rel="icon" href="https://i.ibb.co.com/wtRWhwZ/dongak.png">
+    <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden; 
+            background-color: black; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        #video-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: -100;
+        }
+        #logo {
+            max-width: 50%;
+            height: auto;
+            margin-top: auto;
+        }
+        #hacked-text {
+            font-family: 'Black Ops One', system-ui;
+            font-size: 2.7rem;
+            margin-top: 10px;
+            background: linear-gradient(to bottom, #ffffff 40%, #000000 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            -webkit-text-stroke: 1.5px black;
+        }
+        #name-text {
+            color: red;
+            -webkit-text-fill-color: red;
+            text-decoration: line-through;
+            text-decoration-color: black;
+        }
+        #greets-text {
+            font-family: 'Black Ops One', system-ui;
+            font-size: 1.2rem;
+            margin-top: 5px;
+            background: linear-gradient(to bottom, #ffffff 40%, #000000 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            -webkit-text-stroke: 1.5px black;
+        }
+
+        @media (max-width: 768px) {
+            #hacked-text {
+                font-size: 1.8rem;
+            }
+            #logo {
+                max-width: 80%;
+            }
+            #greets-text {
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <video autoplay loop muted playsinline id="video-background">
+        <source src="https://cdn.jumpshare.com/preview/S55qaEZia-npYQ-RbdbQQE4yEjme5FJeRMemxsuhtFSRzuMBhZYWUmb1PRKkNfgBp_KS636s89RyuZtNsHIbnNdhq1rTWEWX7aeXKK141m6IhjgRSmPPXEDfuSF4QiuXLzoa7UyHY3IJUgiWCW3OmG6yjbN-I2pg_cnoHs_AmgI.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+
+    <div style="position: relative; z-index: 1; color: white; text-align: center; padding: 20px;">
+        <img id="logo" src="https://i.ibb.co.com/wtRWhwZ/dongak.png" alt="Logo">
+        <h1 id="hacked-text">HACKED BY <span id="name-text">GROOVY</span></h1>
+        <p id="greets-text">Greets ..:: Groovy - Lawliet1337 - Abyss1337 - Winter77 ::..</p>
+    </div>
+</body>
+</html>
