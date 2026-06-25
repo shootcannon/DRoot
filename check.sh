@@ -2,16 +2,16 @@
 
 VERSION=v1.2
 
-txtred=$'\033[91;1m'
-txtgrn=$'\033[1;32m'
-txtgray=$'\033[0;37m'
-txtblu=$'\033[0;36m'
-txtrst=$'\033[0m'
-bldwht=$'\033[1;37m'
-wht=$'\033[0;36m'
-bldblu=$'\033[1;34m'
-yellow=$'\033[1;93m'
-lightyellow=$'\033[0;93m'
+txtred=""
+txtgrn=""
+txtgray=""
+txtblu=""
+txtrst=""
+bldwht=""
+wht=""
+bldblu=""
+yellow=""
+lightyellow=""
 
 UNAME_A=""
 
@@ -2387,9 +2387,9 @@ _check_root() {
 }
 
 _root_banner() {
-    local c2=$'\033[38;5;196m'
-    local rst=$'\033[0m'
-    local bold=$'\033[1m'
+    local c2=""
+    local rst=""
+    local bold=""
     
     echo
     echo -e "${c2}${bold}  [ROOT]  uid=0(root) — privilege escalation successful${rst}"
@@ -2503,11 +2503,11 @@ _run_exploit_2025_32463() {
 }
 
 show_banner() {
-    local c1=$'\033[38;5;160m'
-    local c2=$'\033[38;5;196m'
-    local c3=$'\033[38;5;88m'
-    local c4=$'\033[38;5;52m'
-    local rst=$'\033[0m'
+    local c1=""
+    local c2=""
+    local c3=""
+    local c4=""
+    local rst=""
     local cols=$(tput cols 2>/dev/null || echo 80)
 
     clear
@@ -2523,57 +2523,54 @@ show_banner() {
         local w=$1
         local pad=$(( (cols - w) / 2 ))
         [ $pad -lt 0 ] && pad=0
-        printf "${c4}%*s" "$pad" ''
+        printf "%*s" "$pad" ''
         printf '─%.0s' $(seq 1 "$w")
-        printf "${rst}\n"
+        printf "\n"
     }
 
     echo
-    printf "${c2}%s${rst}\n" "$(_p 65 '⣿⣿⣿⣿⣿⣷⣿⣿⣿⡅⡹⢿⠆⠙⠋⠉⠻⠿⣿⣿⣿⣿⣿⣿⣮⠻⣦⡙⢷⡑⠘⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣌⠡⠌⠂⣙⠻⣛⠻⠷⠐⠈⠛⢱⣮⣷⣽⣿')"
-    printf "${c2}%s${rst}\n" "$(_p 65 '⣿⣿⣿⣿⡇⢿⢹⣿⣶⠐⠁⠀⣀⣠⣤⠄⠀⠀⠈⠙⠻⣿⣿⣿⣦⣵⣌⠻⣷⢝⠦⠚⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢟⣻⣿⣊⡃⠀⣙⠿⣿⣿⣿⣎⢮⡀⢮⣽⣿⣿')"
-    printf "${c1}%s${rst}\n" "$(_p 65 '⢿⣿⣿⣿⣧⡸⡎⡛⡩⠖⠀⣴⣿⣿⣿⠀⠀⠀⠀⠸⠇⠀⠙⢿⣿⣿⣿⣷⣌⢷⣑⢷⣄⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣫⠶⠛⠉⠀⠁⠀⠈⠈⠀⠠⠜⠻⣿⣆⢿⣼⣿⣿⣿')"
-    printf "${c1}%s${rst}\n" "$(_p 65 '⢐⣿⣿⣿⣿⣧⢧⣧⢻⣦⢀⣹⣿⣿⣿⣇⠀⠄⠀⠀⠀⡀⠀⠈⢻⣿⣿⣿⣿⣷⣝⢦⡹⠷⡙⢿⣿⣿⣿⣿⣿⣿⣿⣿⠈⠁⠀⠀⠀⠁⠀⠀⠀⠱⣶⣄⡀⠀⠈⠛⠜⣿⣿⣿⣿')"
-    printf "${c1}%s${rst}\n" "$(_p 65 '⠀⠊⢫⣿⣏⣿⡌⣼⣄⢫⡌⣿⣿⣿⣿⣿⣦⡈⠲⣄⣤⣤⡡⢀⣠⣿⣿⣿⣿⣿⣿⣷⣼⣍⢬⣦⡙⣿⣿⣿⣿⣿⣯⢁⡄⠀⡀⡀⠀⠄⢈⣠⢪⠀⣿⣿⣿⣦⠀⢉⢂⠹⡿⣿⣿')"
-    printf "${c3}%s${rst}\n" "$(_p 65 '⠀⠀⠄⢹⢃⢻⣟⠙⣿⣦⠱⢻⣿⣿⣿⣿⣿⣿⣷⣬⣍⣭⣥⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⡙⢿⣼⡿⣿⣿⣿⣿⣿⣷⣄⠘⣱⢦⣤⡴⡿⢈⣼⣿⣿⣿⣇⣴⣶⣮⣅⢻⣿⡏')"
-    printf "${c3}%s${rst}\n" "$(_p 65 '⠀⠀⠈⠹⣇⢡⢿⡆⠻⣿⣷⠀⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣍⡻⣿⣟⣻⣿⣿⣿⣿⣷⣦⣥⣬⣤⣴⣾⣿⣿⣿⣿⣷⣿⣿⣿⣿⣷⡜⠃')"
-    printf "${c3}%s${rst}\n" "$(_p 65 '⠀⠀⠀⢀⣘⠈⢂⠃⣧⡹⣿⣷⡄⠙⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣮⣅⡙⢿⣟⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠋⡕⠂')"
-    printf "${c4}%s${rst}\n" "$(_p 65 '⠀⠀⠀⠀⠀⠀⠛⢷⣜⢷⡌⠻⣿⣿⣦⣝⣻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⣹⣷⣦⣹⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠿⠉⠃⠀')"
+    printf "%s\n" "$(_p 27 '______                 _   ')"
+    printf "%s\n" "$(_p 27 '|  _  \               | |  ')"
+    printf "%s\n" "$(_p 27 '| | | |_ __ ___   ___ | |_ ')"
+    printf "%s\n" "$(_p 27 '| | | | '\''__/ _ \ / _ \| __|')"
+    printf "%s\n" "$(_p 27 '| |/ /| | | (_) | (_) | |_ ')"
+    printf "%s\n" "$(_p 27 '|___/ |_|  \___/ \___/ \__|')"
 
-    local bold=$'\033[1m'
-    local dim=$'\033[38;5;240m'
+    local bold=""
+    local dim=""
 
-    printf "${c2}${bold}%s${rst}\n" "$(_p 12 '[ 1996  REBORN ]')"
-    printf "${dim}%s${rst}\n"       "$(_p 50 'Auto Linux Privilege Escalation Vuln Scanner & Exploit')"
+    printf "%s\n" "$(_p 17 '[ DCE COMMUNITY ]')"
+    printf "%s\n"       "$(_p 35 'Droot Was Here Baby')"
+    printf "%s\n"    "$(_p 42 'Built by pain, and gained by Dongak Community')"
+    echo ""
 }
 
 check_password() {
-    local c1=$'\033[38;5;160m'
-    local c2=$'\033[38;5;196m'
-    local c3=$'\033[38;5;88m'
-    local c4=$'\033[38;5;52m'
-    local rst=$'\033[0m'
+    local c1=""
+    local c2=""
+    local c3=""
+    local c4=""
+    local rst=""
+    local bold=""
+    local dim=""
+    local yellow=""
+    local green=""
 
-    local bold=$'\033[1m'
-    local dim=$'\033[38;5;240m'
-
-    echo
-    printf "${c1}${bold} enter password${rst}\n"
-    printf "${dim}      |\n"
-    printf "      |\n"
-    printf "      v${rst}\n"
-    printf "${c2}${bold} > ${rst}"
+    printf " Enter Password : "
     read -rs password
-    echo
+    echo ""
 
-    if [ "$password" != "1996groovyreborn" ]; then
-        clear
-        printf "${c2}${bold} fuck off${rst}\n"
+    if [ "$password" != "dcecommunity2026" ]; then
+        echo ""
+        printf " 403 Wrong Password!!!\n"
+        printf " Contact Owner: dce community\n"
+        sleep 2
         exit 1
     fi
 
-    # printf "${c1} access granted${rst}\n"
+    printf " Access Granted!\n"
     sleep 0.3
-    echo
+    echo ""
 }
 
 show_banner
